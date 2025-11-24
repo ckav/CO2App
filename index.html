@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CO2 Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 { margin: 0; color: #333; }
+        
+        .status-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .main-reading {
+            grid-column: 1 / -1;
+            background: #e3f2fd;
+            padding: 30px;
+        }
+        .value {
+            font-size: 3em;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .unit { font-size: 0.5em; color: #666; }
+        .label { color: #666; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .quality-good { color: #2e7d32; background-color: #e8f5e9; }
+        .quality-moderate { color: #f57c00; background-color: #fff3e0; }
+        .quality-poor { color: #c62828; background-color: #ffebee; }
+        
+        button {
+            background-color: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #1565c0; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        button.secondary { background-color: #757575; }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        #connectionStatus {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 0.9em;
+        }
+        .connected { color: green; }
+        .disconnected { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>CO2 Monitor</h1>
+                <span id="connectionStatus" class="disconnected">● Disconnected</span>
+            </div>
+            <div>
+                <button id="connectBtn">Connect Arduino</button>
+            </div>
+        </header>
+
+        <div class="status-panel">
+            <div class="card main-reading" id="mainCard">
+                <div class="label">Current CO2 Level</div>
+                <div class="value"><span id="currentVal">--</span> <span class="unit">PPM</span></div>
+                <div id="qualityText">Waiting for data...</div>
+            </div>
+            <div class="card">
+                <div class="label">Average</div>
+                <div class="value" style="font-size: 1.5em;" id="avgVal">--</div>
+            </div>
+            <div class="card">
+                <div class="label">Min</div>
+                <div class="value" style="font-size: 1.5em;" id="minVal">--</div>
+            </div>
+            <div class="card">
+                <div class="label">Max</div>
+                <div class="value" style="font-size: 1.5em;" id="maxVal">--</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="co2Chart"></canvas>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong>Data Points:</strong> <span id="dataCount">0</span>
+            </div>
+            <div>
+                <button id="clearBtn" class="secondary">Clear Data</button>
+                <button id="exportBtn" class="secondary">Export CSV</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let port;
+        let reader;
+        let keepReading = false;
+        let dataPoints = [];
+        let lastDataTime = 0;
+        const MAX_POINTS = 100;
+        
+        // Load saved data
+        const savedData = localStorage.getItem('co2Data');
+        if (savedData) {
+            try {
+                dataPoints = JSON.parse(savedData);
+                // Convert string dates back to objects if needed, though Chart.js handles strings well
+            } catch (e) {
+                console.error('Error loading saved data', e);
+            }
+        }
+
+        // Chart Setup
+        const ctx = document.getElementById('co2Chart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dataPoints.map(d => new Date(d.timestamp).toLocaleTimeString()),
+                datasets: [{
+                    label: 'CO2 (PPM)',
+                    data: dataPoints.map(d => d.value),
+                    borderColor: '#1976d2',
+                    backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Threshold (1000 PPM)',
+                    data: Array(MAX_POINTS).fill(1000),
+                    borderColor: 'rgba(255, 99, 132, 0.8)',
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        suggestedMin: 400,
+                        suggestedMax: 1200
+                    }
+                }
+            }
+        });
+
+        updateStats();
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            if ('serial' in navigator) {
+                try {
+                    port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: 9600 });
+                    
+                    document.getElementById('connectionStatus').textContent = '● Connected';
+                    document.getElementById('connectionStatus').className = 'connected';
+                    document.getElementById('connectBtn').disabled = true;
+                    
+                    keepReading = true;
+                    readSerial();
+                } catch (err) {
+                    console.error('There was an error opening the serial port:', err);
+                    alert('Error connecting: ' + err.message);
+                }
+            } else {
+                alert('Web Serial API not supported in this browser. Try Chrome or Edge.');
+            }
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if(confirm('Clear all stored data?')) {
+                dataPoints = [];
+                localStorage.removeItem('co2Data');
+                updateChart();
+                updateStats();
+            }
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            let csvContent = "data:text/csv;charset=utf-8,Timestamp,CO2_PPM\n";
+            dataPoints.forEach(row => {
+                csvContent += `${new Date(row.timestamp).toISOString()},${row.value}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "co2_data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        async function readSerial() {
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+            const reader = textDecoder.readable.getReader();
+            
+            let buffer = '';
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        reader.releaseLock();
+                        break;
+                    }
+                    
+                    buffer += value;
+                    const lines = buffer.split('\n');
+                    
+                    // Process all complete lines
+                    for (let i = 0; i < lines.length - 1; i++) {
+                        processLine(lines[i].trim());
+                    }
+                    
+                    // Keep the last partial line in the buffer
+                    buffer = lines[lines.length - 1];
+                }
+            } catch (error) {
+                console.error('Error reading serial:', error);
+            }
+        }
+
+        function processLine(line) {
+            // Expected format: "CO2ppm:565"
+            // The Arduino code might output two lines per reading, so we use regex to be specific
+            // and debounce in addDataPoint to avoid duplicates.
+            console.log('Received:', line);
+            
+            const match = line.match(/CO2ppm:(\d+)/);
+            if (match) {
+                const ppm = parseInt(match[1]);
+                if (!isNaN(ppm) && ppm > 0 && ppm < 10000) { // Basic sanity check
+                    addDataPoint(ppm);
+                }
+            }
+        }
+
+        function addDataPoint(ppm) {
+            const now = new Date().getTime();
+            
+            // Debounce: The Arduino code might print the same value twice (once for plotter, once for debug)
+            // We ignore readings that come too fast (within 500ms)
+            if (now - lastDataTime < 500) {
+                return;
+            }
+            lastDataTime = now;
+
+            dataPoints.push({
+                timestamp: now,
+                value: ppm
+            });
+
+            // Keep only last MAX_POINTS for the chart, but maybe we want to store more?
+            // For MVP let's keep it simple and limit array size to avoid memory issues
+            if (dataPoints.length > 2000) { 
+                dataPoints.shift(); 
+            }
+
+            // Save to local storage periodically or on every update (might be slow if too frequent)
+            localStorage.setItem('co2Data', JSON.stringify(dataPoints));
+
+            updateChart();
+            updateStats();
+        }
+
+        function updateChart() {
+            // Update chart with last MAX_POINTS
+            const recentData = dataPoints.slice(-MAX_POINTS);
+            
+            chart.data.labels = recentData.map(d => new Date(d.timestamp).toLocaleTimeString());
+            chart.data.datasets[0].data = recentData.map(d => d.value);
+            chart.data.datasets[1].data = Array(recentData.length).fill(1000);
+            chart.update('none'); // 'none' mode for performance
+        }
+
+        function updateStats() {
+            if (dataPoints.length === 0) return;
+
+            const current = dataPoints[dataPoints.length - 1].value;
+            const values = dataPoints.map(d => d.value);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+
+            document.getElementById('currentVal').textContent = current;
+            document.getElementById('minVal').textContent = min;
+            document.getElementById('maxVal').textContent = max;
+            document.getElementById('avgVal').textContent = avg;
+            document.getElementById('dataCount').textContent = dataPoints.length;
+
+            // Update quality indicator based on Arduino thresholds
+            // Arduino code: Green if < 1000, Red if >= 1000
+            const mainCard = document.getElementById('mainCard');
+            const qualityText = document.getElementById('qualityText');
+            
+            mainCard.className = 'card main-reading'; // reset
+            if (current < 1000) {
+                mainCard.classList.add('quality-good');
+                qualityText.textContent = 'Air Quality: Good';
+            } else {
+                mainCard.classList.add('quality-poor');
+                qualityText.textContent = 'Air Quality: Poor - Ventilate!';
+            }
+        }
+    </script>
+</body>
+</html>

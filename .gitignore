@@ -1,0 +1,16 @@
+# General
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Node/Web
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Local data
+*.csv
+*.log

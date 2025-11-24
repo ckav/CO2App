@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breath Explorer - CO2 Monitor</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(180deg, #87CEEB 0%, #98FB98 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Floating clouds animation */
+        .clouds {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .cloud {
+            position: absolute;
+            font-size: 4rem;
+            opacity: 0.6;
+            animation: float-cloud 20s linear infinite;
+        }
+
+        .cloud:nth-child(1) { top: 10%; animation-delay: 0s; }
+        .cloud:nth-child(2) { top: 25%; animation-delay: -5s; font-size: 3rem; }
+        .cloud:nth-child(3) { top: 5%; animation-delay: -10s; font-size: 5rem; }
+        .cloud:nth-child(4) { top: 35%; animation-delay: -15s; font-size: 2.5rem; }
+
+        @keyframes float-cloud {
+            from { left: -20%; }
+            to { left: 120%; }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: #2E7D32;
+            text-shadow: 2px 2px 0 #fff;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            color: #558B2F;
+        }
+
+        /* Connection status */
+        .connection-bar {
+            background: rgba(255,255,255,0.9);
+            border-radius: 30px;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .pulse-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .pulse-dot.connected {
+            background: #4CAF50;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        /* Main character display */
+        .character-zone {
+            background: rgba(255,255,255,0.95);
+            border-radius: 30px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .character {
+            font-size: 8rem;
+            line-height: 1;
+            margin-bottom: 10px;
+            transition: transform 0.3s ease;
+            animation: bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .character.breathing {
+            animation: breathe 1s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .speech-bubble {
+            background: #E3F2FD;
+            border-radius: 20px;
+            padding: 15px 25px;
+            margin: 15px auto;
+            max-width: 300px;
+            position: relative;
+            font-size: 1.2rem;
+            color: #1565C0;
+            font-weight: 500;
+        }
+
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 10px solid transparent;
+            border-bottom-color: #E3F2FD;
+        }
+
+        /* CO2 reading display */
+        .reading-display {
+            margin: 20px 0;
+        }
+
+        .ppm-number {
+            font-size: 5rem;
+            font-weight: 800;
+            line-height: 1;
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ppm-number.moderate {
+            background: linear-gradient(135deg, #FF9800, #FFC107);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .ppm-number.high {
+            background: linear-gradient(135deg, #f44336, #FF5722);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .ppm-label {
+            font-size: 1.2rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        /* Air quality meter */
+        .quality-meter {
+            background: #f0f0f0;
+            border-radius: 15px;
+            height: 30px;
+            margin: 20px 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .quality-fill {
+            height: 100%;
+            border-radius: 15px;
+            transition: width 0.5s ease, background 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+        }
+
+        .quality-emoji {
+            font-size: 1.5rem;
+        }
+
+        .quality-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        /* Fun facts section */
+        .fun-fact {
+            background: linear-gradient(135deg, #FFF9C4, #FFECB3);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 5px solid #FFC107;
+        }
+
+        .fun-fact-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-weight: 700;
+            color: #F57C00;
+        }
+
+        .fun-fact p {
+            color: #5D4037;
+            line-height: 1.5;
+        }
+
+        /* Breath challenge button */
+        .challenge-btn {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 15px;
+        }
+
+        .challenge-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .challenge-btn:active {
+            transform: scale(0.98);
+        }
+
+        .challenge-btn.start {
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+            color: white;
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+
+        .challenge-btn.stop {
+            background: linear-gradient(135deg, #FF5722, #FF9800);
+            color: white;
+            box-shadow: 0 6px 20px rgba(255, 87, 34, 0.4);
+        }
+
+        .challenge-btn.connect {
+            background: linear-gradient(135deg, #2196F3, #03A9F4);
+            color: white;
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
+        }
+
+        /* Chart section */
+        .chart-section {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        canvas {
+            width: 100%;
+            height: 150px;
+        }
+
+        /* Achievements */
+        .achievements {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .achievements-title {
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .badge {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            filter: grayscale(100%);
+            opacity: 0.5;
+            transition: all 0.3s ease;
+        }
+
+        .badge.earned {
+            filter: grayscale(0%);
+            opacity: 1;
+            background: linear-gradient(135deg, #FFD700, #FFA000);
+            box-shadow: 0 4px 15px rgba(255, 193, 7, 0.4);
+            animation: badge-pop 0.5s ease;
+        }
+
+        @keyframes badge-pop {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* Footer info */
+        .footer-info {
+            text-align: center;
+            padding: 20px;
+            color: #2E7D32;
+            font-size: 0.9rem;
+        }
+
+        .footer-info a {
+            color: #1565C0;
+        }
+
+        /* Celebration overlay */
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .confetti {
+            position: absolute;
+            font-size: 2rem;
+            animation: fall 3s linear forwards;
+        }
+
+        @keyframes fall {
+            0% { 
+                transform: translateY(-100px) rotate(0deg); 
+                opacity: 1;
+            }
+            100% { 
+                transform: translateY(100vh) rotate(720deg); 
+                opacity: 0;
+            }
+        }
+
+        /* Breathing guide overlay */
+        .breathing-guide {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 50;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .breathing-guide.active {
+            display: flex;
+        }
+
+        .breathing-circle {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            animation: breathe-guide 4s ease-in-out infinite;
+        }
+
+        @keyframes breathe-guide {
+            0%, 100% { transform: scale(0.8); }
+            50% { transform: scale(1.2); }
+        }
+
+        /* Responsive */
+        @media (max-width: 400px) {
+            .character { font-size: 5rem; }
+            .ppm-number { font-size: 3.5rem; }
+            h1 { font-size: 1.4rem; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating clouds background -->
+    <div class="clouds">
+        <div class="cloud">☁️</div>
+        <div class="cloud">☁️</div>
+        <div class="cloud">☁️</div>
+        <div class="cloud">☁️</div>
+    </div>
+
+    <!-- Celebration confetti container -->
+    <div class="celebration" id="celebration"></div>
+
+    <div class="container">
+        <header>
+            <div class="logo">🌬️🌿</div>
+            <h1>Breath Explorer</h1>
+            <p class="subtitle">Discover the science of breathing!</p>
+        </header>
+
+        <div class="connection-bar">
+            <span class="pulse-dot" id="statusDot"></span>
+            <span id="statusText">Tap to connect sensor</span>
+        </div>
+
+        <div class="character-zone">
+            <div class="character" id="character">🌱</div>
+            <div class="speech-bubble" id="speechBubble">
+                Hi! I'm Sprout! Blow on the sensor and watch what happens! 🌬️
+            </div>
+            
+            <div class="reading-display">
+                <div class="ppm-number" id="ppmValue">---</div>
+                <div class="ppm-label">CO₂ parts per million</div>
+            </div>
+
+            <div class="quality-meter">
+                <div class="quality-fill" id="qualityFill" style="width: 30%; background: linear-gradient(90deg, #4CAF50, #8BC34A);">
+                    <span class="quality-emoji">🌿</span>
+                </div>
+            </div>
+            <div class="quality-labels">
+                <span>Fresh Air 🌲</span>
+                <span>Stuffy 😮‍💨</span>
+            </div>
+        </div>
+
+        <button class="challenge-btn connect" id="mainBtn">
+            🔌 Connect Sensor
+        </button>
+
+        <div class="fun-fact" id="funFact">
+            <div class="fun-fact-header">
+                <span>💡</span>
+                <span>Did you know?</span>
+            </div>
+            <p id="funFactText">Plants breathe in the CO₂ you breathe out! They use it to make food and release oxygen for you to breathe. You and plants are breathing buddies! 🌱</p>
+        </div>
+
+        <div class="chart-section">
+            <div class="chart-title">📊 Your Breath Journey</div>
+            <canvas id="chart"></canvas>
+        </div>
+
+        <div class="achievements">
+            <div class="achievements-title">🏆 Badges Earned</div>
+            <div class="badge-row">
+                <div class="badge" id="badge1" title="First Breath">🌬️</div>
+                <div class="badge" id="badge2" title="Super Breather">💨</div>
+                <div class="badge" id="badge3" title="CO2 Detective">🔍</div>
+                <div class="badge" id="badge4" title="Science Star">⭐</div>
+                <div class="badge" id="badge5" title="Breath Master">👑</div>
+            </div>
+        </div>
+
+        <div class="footer-info">
+            <p>🏛️ Part of the Library Science Explorer Program</p>
+            <p style="margin-top: 5px; font-size: 0.8rem;">Powered by curiosity!</p>
+        </div>
+    </div>
+
+    <script>
+        // Check for Web Serial API support
+        const isSupported = 'serial' in navigator;
+        
+        // State
+        let port = null;
+        let reader = null;
+        let isConnected = false;
+        let readings = [];
+        let breathCount = 0;
+        let highestReading = 0;
+        let challengeActive = false;
+
+        // Fun facts about CO2 and breathing
+        const funFacts = [
+            "Plants breathe in the CO₂ you breathe out! They use it to make food and release oxygen for you to breathe. You and plants are breathing buddies! 🌱",
+            "Every time you breathe out, you release about 4% CO₂. That's 100 times more than what's in the air around you! 😮",
+            "Trees are like giant air cleaners! One big tree can absorb 22 kg of CO₂ in a year. That's as heavy as a medium-sized dog! 🌳",
+            "Astronauts on the Space Station have special machines to remove CO₂ from the air. Without them, the air would get stuffy! 🚀",
+            "Your breath contains the same carbon atoms that dinosaurs breathed millions of years ago! Carbon gets recycled forever! 🦕",
+            "When you exercise, you breathe out MORE CO₂ because your body is working harder. Try jumping and then breathing on the sensor! 🏃",
+            "Fizzy drinks have CO₂ dissolved in them - that's what makes the bubbles! The same gas you breathe out! 🥤",
+            "Submarines have to carefully monitor CO₂ levels to keep the crew safe underwater. You're doing the same science! 🚢"
+        ];
+
+        // Character states
+        const characters = {
+            neutral: { emoji: '🌱', message: "Hi! I'm Sprout! Blow on the sensor and watch what happens! 🌬️" },
+            happy: { emoji: '🌻', message: "Wow! The air is super fresh! Great for growing! 🌈" },
+            curious: { emoji: '🌿', message: "Interesting! I can sense your breath! Keep going! 👀" },
+            excited: { emoji: '🌺', message: "Whoa! That's a BIG breath! You're a super breather! 🎉" },
+            thinking: { emoji: '🍀', message: "Hmm, the air is getting a bit stuffy. Maybe open a window? 🪟" },
+            waiting: { emoji: '🌱', message: "I'm ready! Blow on the sensor to start the experiment! 🔬" }
+        };
+
+        // DOM Elements
+        const mainBtn = document.getElementById('mainBtn');
+        const ppmValue = document.getElementById('ppmValue');
+        const character = document.getElementById('character');
+        const speechBubble = document.getElementById('speechBubble');
+        const qualityFill = document.getElementById('qualityFill');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const funFactText = document.getElementById('funFactText');
+
+        // Initialize
+        if (!isSupported) {
+            mainBtn.textContent = '⚠️ Use Chrome Browser';
+            mainBtn.disabled = true;
+            speechBubble.textContent = "Oops! Please open this page in Chrome or Edge browser to connect the sensor! 🌐";
+        }
+
+        // Event listeners
+        mainBtn.addEventListener('click', handleMainButton);
+
+        function handleMainButton() {
+            if (!isConnected) {
+                connect();
+            } else {
+                disconnect();
+            }
+        }
+
+        async function connect() {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                
+                setConnected(true);
+                earnBadge('badge1'); // First connection badge
+                
+                readLoop();
+            } catch (error) {
+                console.error('Connection failed:', error);
+                updateCharacter('neutral');
+                speechBubble.textContent = "Hmm, I couldn't find the sensor. Make sure it's plugged in! 🔌";
+            }
+        }
+
+        async function disconnect() {
+            try {
+                if (reader) {
+                    await reader.cancel();
+                    reader = null;
+                }
+                if (port) {
+                    await port.close();
+                    port = null;
+                }
+                setConnected(false);
+            } catch (error) {
+                console.error('Disconnect error:', error);
+            }
+        }
+
+        function setConnected(connected) {
+            isConnected = connected;
+            statusDot.classList.toggle('connected', connected);
+            statusText.textContent = connected ? '🟢 Sensor connected!' : 'Tap to connect sensor';
+            
+            if (connected) {
+                mainBtn.textContent = '🛑 Disconnect Sensor';
+                mainBtn.className = 'challenge-btn stop';
+                updateCharacter('waiting');
+            } else {
+                mainBtn.textContent = '🔌 Connect Sensor';
+                mainBtn.className = 'challenge-btn connect';
+                updateCharacter('neutral');
+            }
+        }
+
+        async function readLoop() {
+            const decoder = new TextDecoderStream();
+            port.readable.pipeTo(decoder.writable);
+            const inputStream = decoder.readable;
+            reader = inputStream.getReader();
+
+            let buffer = '';
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += value;
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        processLine(line.trim());
+                    }
+                }
+            } catch (error) {
+                console.error('Read error:', error);
+            } finally {
+                reader.releaseLock();
+            }
+        }
+
+        function processLine(line) {
+            if (!line) return;
+            
+            let ppm = null;
+            
+            // Parse CO2ppm:XXX format
+            const match1 = line.match(/CO2ppm[:\s]*(\d+)/i);
+            if (match1) ppm = parseInt(match1[1]);
+            
+            // Parse plain number
+            if (ppm === null) {
+                const match2 = line.match(/^(\d+)$/);
+                if (match2) ppm = parseInt(match2[1]);
+            }
+            
+            if (ppm !== null && ppm > 0 && ppm < 10000) {
+                addReading(ppm);
+            }
+        }
+
+        function addReading(ppm) {
+            readings.push({
+                ppm: ppm,
+                timestamp: Date.now()
+            });
+
+            // Keep last 50 readings
+            if (readings.length > 50) {
+                readings = readings.slice(-50);
+            }
+
+            // Track highest reading
+            if (ppm > highestReading) {
+                highestReading = ppm;
+                if (highestReading > 1000) {
+                    earnBadge('badge2'); // Super Breather
+                }
+                if (highestReading > 2000) {
+                    earnBadge('badge4'); // Science Star
+                }
+            }
+
+            // Count breaths (significant increases)
+            if (readings.length > 1) {
+                const prevPpm = readings[readings.length - 2].ppm;
+                if (ppm > prevPpm + 100) {
+                    breathCount++;
+                    if (breathCount >= 5) earnBadge('badge3'); // CO2 Detective
+                    if (breathCount >= 10) earnBadge('badge5'); // Breath Master
+                }
+            }
+
+            updateDisplay(ppm);
+            drawChart();
+        }
+
+        function updateDisplay(ppm) {
+            // Update number
+            ppmValue.textContent = ppm;
+            
+            // Update character based on reading
+            if (ppm < 600) {
+                updateCharacter('happy');
+                ppmValue.className = 'ppm-number';
+            } else if (ppm < 1000) {
+                updateCharacter('curious');
+                ppmValue.className = 'ppm-number';
+            } else if (ppm < 1500) {
+                updateCharacter('excited');
+                ppmValue.className = 'ppm-number moderate';
+                triggerCelebration();
+            } else {
+                updateCharacter('thinking');
+                ppmValue.className = 'ppm-number high';
+            }
+
+            // Update quality meter (map 400-2000 to 0-100%)
+            const percentage = Math.min(100, Math.max(0, ((ppm - 400) / 1600) * 100));
+            qualityFill.style.width = percentage + '%';
+            
+            if (percentage < 40) {
+                qualityFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+                qualityFill.innerHTML = '<span class="quality-emoji">🌿</span>';
+            } else if (percentage < 70) {
+                qualityFill.style.background = 'linear-gradient(90deg, #8BC34A, #FFC107)';
+                qualityFill.innerHTML = '<span class="quality-emoji">🌻</span>';
+            } else {
+                qualityFill.style.background = 'linear-gradient(90deg, #FFC107, #FF5722)';
+                qualityFill.innerHTML = '<span class="quality-emoji">😮‍💨</span>';
+            }
+
+            // Add breathing animation to character
+            character.classList.add('breathing');
+            setTimeout(() => character.classList.remove('breathing'), 1000);
+        }
+
+        function updateCharacter(state) {
+            const charState = characters[state];
+            character.textContent = charState.emoji;
+            speechBubble.textContent = charState.message;
+        }
+
+        function triggerCelebration() {
+            const celebration = document.getElementById('celebration');
+            const emojis = ['🎉', '⭐', '🌟', '✨', '🎊', '💫'];
+            
+            for (let i = 0; i < 10; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.animationDelay = Math.random() * 0.5 + 's';
+                celebration.appendChild(confetti);
+                
+                setTimeout(() => confetti.remove(), 3000);
+            }
+        }
+
+        function earnBadge(badgeId) {
+            const badge = document.getElementById(badgeId);
+            if (!badge.classList.contains('earned')) {
+                badge.classList.add('earned');
+                triggerCelebration();
+                
+                // Show congratulations
+                const messages = {
+                    badge1: "🎉 First Breath badge earned! You connected the sensor!",
+                    badge2: "💨 Super Breather! That was a powerful breath!",
+                    badge3: "🔍 CO2 Detective! You've taken 5 breath readings!",
+                    badge4: "⭐ Science Star! You reached over 2000 ppm!",
+                    badge5: "👑 Breath Master! 10 readings complete!"
+                };
+                
+                speechBubble.textContent = messages[badgeId];
+            }
+        }
+
+        function drawChart() {
+            const canvas = document.getElementById('chart');
+            const ctx = canvas.getContext('2d');
+            
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            
+            const width = rect.width;
+            const height = rect.height;
+            const padding = 30;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            if (readings.length < 2) {
+                ctx.fillStyle = '#999';
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Breathe on the sensor to see your graph! 📈', width / 2, height / 2);
+                return;
+            }
+            
+            const displayReadings = readings.slice(-30);
+            const ppms = displayReadings.map(r => r.ppm);
+            const minPpm = Math.min(...ppms) - 50;
+            const maxPpm = Math.max(...ppms) + 50;
+            
+            // Draw gradient background
+            const gradient = ctx.createLinearGradient(0, padding, 0, height - padding);
+            gradient.addColorStop(0, 'rgba(255, 87, 34, 0.1)');
+            gradient.addColorStop(0.5, 'rgba(255, 193, 7, 0.1)');
+            gradient.addColorStop(1, 'rgba(76, 175, 80, 0.1)');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(padding, padding, width - 2 * padding, height - 2 * padding);
+            
+            // Draw line
+            ctx.strokeStyle = '#4CAF50';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            
+            for (let i = 0; i < displayReadings.length; i++) {
+                const x = padding + (width - 2 * padding) * i / (displayReadings.length - 1);
+                const y = padding + (height - 2 * padding) * (1 - (displayReadings[i].ppm - minPpm) / (maxPpm - minPpm));
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            
+            // Draw current point
+            if (displayReadings.length > 0) {
+                const last = displayReadings[displayReadings.length - 1];
+                const x = width - padding;
+                const y = padding + (height - 2 * padding) * (1 - (last.ppm - minPpm) / (maxPpm - minPpm));
+                
+                ctx.fillStyle = '#4CAF50';
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Rotate fun facts every 15 seconds
+        let factIndex = 0;
+        setInterval(() => {
+            factIndex = (factIndex + 1) % funFacts.length;
+            funFactText.style.opacity = 0;
+            setTimeout(() => {
+                funFactText.textContent = funFacts[factIndex];
+                funFactText.style.opacity = 1;
+            }, 300);
+        }, 15000);
+
+        // Initial chart draw
+        drawChart();
+        window.addEventListener('resize', drawChart);
+
+        // Demo mode for testing without sensor
+        // Uncomment below to test the interface:
+        /*
+        setInterval(() => {
+            if (isConnected) {
+                const fakePpm = 400 + Math.random() * 800 + (Math.random() > 0.7 ? 500 : 0);
+                addReading(Math.round(fakePpm));
+            }
+        }, 1000);
+        */
+    </script>
+</body>
+</html>
